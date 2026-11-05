@@ -18,7 +18,7 @@ memory: 8192           # smallest allowed shape; the server itself needs ~20 MB
 containers:
   - name: "personalizer"
     # Digest printed by the Build Image workflow in zkBrief/tinfoil (run summary). Tag-only refs are rejected.
-    image: "ghcr.io/zkbrief/tinfoil@sha256:REPLACE_WITH_DIGEST_FROM_BUILD_IMAGE"
+    image: "ghcr.io/zkbrief/tinfoil@sha256:7e44470de4ea5c168b14df56b753e2155cf4f2667409e4fbb95c351b5be779a6"
     env:
       - INFERENCE_MODE: "mock"           # first deploy without Kimi costs; next release: "tinfoil"
       - TINFOIL_ENCLAVE: "inference.tinfoil.sh"
