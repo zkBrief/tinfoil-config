@@ -1,21 +1,18 @@
-# zkBrief — konfiguracja enklawy Tinfoil
+# zkBrief — Tinfoil enclave configuration
 
-Publiczne repo z konfiguracją kontenera `zkbrief` w Tinfoil Containers. Tinfoil mierzy `tinfoil-config.yml` przy każdym wydaniu i publikuje pomiar w logu Sigstore. Aplikacje zkBrief sprawdzają enklawę względem wydań **tego** repo, zanim wyślą jej zapieczętowany profil.
+Measured configuration of the zkBrief enclave running on [Tinfoil Containers](https://docs.tinfoil.sh/containers/overview).
 
-| Repo | Widoczność | Zawartość |
-|---|---|---|
-| `zkBrief/tinfoil-config` (to repo) | publiczne | `tinfoil-config.yml`, workflowy wydania |
-| `zkBrief/tinfoil` | prywatne | kod enklawy, `Dockerfile`, budowa obrazu `ghcr.io/zkbrief/tinfoil` |
+Each release measures `tinfoil-config.yml` and publishes the measurement to the Sigstore transparency log. zkBrief clients verify the enclave's attestation against a release of this repository before sending it a sealed reader profile.
 
-W tym repo nie ma sekretów, tylko ich nazwy (`TINFOIL_API_KEY`, `CLIENT_TOKENS`, `BACKEND_TOKENS`, `PROFILE_KEY_SEED`). Wartości są w Tinfoil jako sekrety repo `zkBrief/tinfoil-config`.
+## Contents
 
-## Nowe wydanie
+- `tinfoil-config.yml` — image pinned by digest, resources, environment, secret names, egress allowlist and exposed paths.
+- `.github/workflows/` — release workflows.
 
-1. W `zkBrief/tinfoil`: `gh workflow run build-image.yml -R zkBrief/tinfoil -f version=vX.Y.Z`. Digest jest w podsumowaniu przebiegu.
-2. Tutaj: wpisz digest w `image:` w `tinfoil-config.yml`, commit i push.
-3. `gh workflow run tinfoil-release.yml -R zkBrief/tinfoil-config -f version=vX.Y.Z`. Workflow tworzy tag i uruchamia *Tinfoil Release - Publish* (pomiar, Sigstore, GitHub Release z `tinfoil-deployment.json` i `tinfoil.hash`).
-4. Pierwszy raz: `tinfoil container create zkbrief --repo zkBrief/tinfoil-config --tag vX.Y.Z` z czterema `--secret`. Kolejne: `tinfoil container update zkbrief --tag vX.Y.Z`.
+Secret values are never stored here, only their names. The image is built from a separate source repository.
 
-Tagu wydania nie da się użyć ponownie. Każda zmiana configu (także `env`) to nowe wydanie.
+## Releasing
 
-Szczegóły: `docs/DEPLOY.md` w `zkBrief/tinfoil`.
+1. Set `image:` to the digest of the new build.
+2. Run the **Tinfoil Release** workflow with a new version tag (e.g. `v0.1.1`). Tags are never reused.
+3. Deploy it: `tinfoil container update zkbrief --tag <version>`.
