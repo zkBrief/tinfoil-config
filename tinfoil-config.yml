@@ -1,0 +1,79 @@
+# zkBrief personalizer — Tinfoil Container configuration.
+#
+# This file sits at the root of the PUBLIC repository zkBrief/tinfoil-config (Tinfoil
+# requires the config repo to be public). Each release (Tinfoil Release workflow)
+# measures it and publishes the measurement to the Sigstore transparency log;
+# clients (iOS EnclaveHandle, zkb-cli) refuse to talk to an enclave whose
+# measurement does not match a release of this repo.
+# The image is built from the private code repo zkBrief/tinfoil (Build Image workflow).
+# Everything below is public — never put secret values here, only secret NAMES.
+#
+# Security-relevant settings are literals on purpose: a bare variable name would
+# take its value from the instance at deploy time and would NOT be measured.
+
+cvm-version: 0.14.12   # take the current value from tinfoilsh/tinfoil-containers-template
+cpus: 2
+memory: 8192           # smallest allowed shape; the server itself needs ~20 MB
+
+containers:
+  - name: "personalizer"
+    # Digest printed by the Build Image workflow in zkBrief/tinfoil (run summary). Tag-only refs are rejected.
+    image: "ghcr.io/zkbrief/tinfoil@sha256:REPLACE_WITH_DIGEST_FROM_BUILD_IMAGE"
+    env:
+      - INFERENCE_MODE: "mock"           # first deploy without Kimi costs; next release: "tinfoil"
+      - TINFOIL_ENCLAVE: "inference.tinfoil.sh"
+      - TINFOIL_REPO: "tinfoilsh/confidential-model-router"
+      - MODEL: "gemma4-31b"
+      - MAX_OUTPUT_TOKENS: "2000"
+      - SOURCE_ALLOWED_HOSTS: "media.misztal.link"
+      - ALLOW_INLINE_ITEMS: "true"
+      - AUTH_DISABLED: "false"
+      - MAX_CONCURRENT_REQUESTS: "16"
+      - RUST_LOG: "info"
+      # Curation for the backend (/v1/curate/*): sealed reader profile + public news.
+      - CURATE_MODEL: "kimi-k3"
+      - CURATE_MAX_OUTPUT_TOKENS: "16000"   # Kimi K3 reasons natively; reasoning tokens count here
+      - CURATE_MAX_INPUT_ITEMS: "400"
+      - CURATE_REQUEST_TIMEOUT_SECS: "300"
+      - RESPONSE_FORMAT: "json_schema"
+      # Batch editions (/v1/curate/batch/*): readers per request, parallel Kimi calls, candidates per reader.
+      - CURATE_BATCH_MAX_READERS: "50"
+      - CURATE_BATCH_CONCURRENCY: "4"
+      - CURATE_EDITION_MAX_CANDIDATES: "800"
+    secrets:
+      - TINFOIL_API_KEY      # Tinfoil inference API key (tk_...)
+      - CLIENT_TOKENS        # comma-separated bearer tokens accepted from the apps (>= 16 chars each)
+      - BACKEND_TOKENS       # comma-separated bearer tokens of the backend (n8n) for /v1/curate/*; must differ from CLIENT_TOKENS
+      - PROFILE_KEY_SEED     # 32 random bytes (64 hex); the enclave derives its X25519 profile key from it
+      # During a key rotation add PROFILE_KEY_SEED_PREVIOUS here (old seed) for one release.
+    networks: [egress]
+    healthcheck:
+      test: ["CMD", "/personalizer", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: always
+
+# Outbound traffic is closed by default. The personalizer may reach only:
+networks:
+  egress:
+    egress: allowlist
+    allow:
+      - inference.tinfoil.sh      # verified inference router (attestation + /v1/chat/completions)
+      - github-proxy.tinfoil.sh   # release digest + Sigstore bundle used to verify the router
+      - kds-proxy.tinfoil.sh      # AMD VCEK certificates used to verify the router's SEV-SNP report
+      - media.misztal.link        # zkBrief editions (source.type = feed_url)
+
+# The shim terminates attested TLS inside the enclave and forwards only these paths.
+shim:
+  upstream-port: 8080
+  paths:
+    - /health
+    - /v1/info
+    - /v1/personalize
+    - /v1/profile-key
+    - /v1/curate/select
+    - /v1/curate/guidelines
+    - /v1/curate/batch/select
+    - /v1/curate/batch/finish
